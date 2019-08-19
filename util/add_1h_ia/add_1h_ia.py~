@@ -1,0 +1,30 @@
+from __future__ import print_function
+from builtins import range
+from cosmosis.datablock import names, option_section
+import sys
+import numpy as np
+import scipy.interpolate as spi
+
+def setup(options):
+    return 0
+
+def execute(block, config):
+    import pdb ; pdb.set_trace()
+    # one halo term(s)
+    k, z, gi_1h = block.get_grid('galaxy_intrinsic_power_1h', 'k_h','z','p_k')
+    k, z, mi_1h = block.get_grid('matter_intrinsic_power_1h', 'k_h','z','p_k')
+    k, z, ii_1h = block.get_grid('intrinsic_power_1h', 'k_h','z','p_k')
+
+    k, z, gi_2h = block.get_grid('galaxy_intrinsic_power', 'k_h','z','p_k')
+    k, z, mi_2h = block.get_grid('matter_intrinsic_power', 'k_h','z','p_k')
+    k, z, ii_2h = block.get_grid('intrinsic_power', 'k_h','z','p_k')
+
+    gi = gi_1h + gi_2h
+    mi = mi_1h + mi_2h
+    ii = ii_1h + ii_2h
+
+    block.replace_grid('galaxy_intrinsic_power', 'k_h', k,'z', z,'p_k', gi)
+    block.replace_grid('matter_intrinsic_power', 'k_h', k,'z', z,'p_k', mi)
+    block.replace_grid('intrinsic_power', 'k_h', k,'z', z,'p_k', ii)
+
+    return 0
