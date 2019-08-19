@@ -8,7 +8,8 @@ Code for IA modelling. The modules here are designed to be plugged into a CosmoS
 ### util
 
 add_1h_ia:
-<p> *Summary:* Read pre-computed one and two halo power spectra from the block, and add them together.</p> 
-<p> *Language:* python </p>p>
-
+<ul>
+    <li><strong>Summary:</strong> Read pre-computed one and two halo power spectra from the block, and add them together.</li>
+    <li><strong>Language:</strong> python</li>
+</ul>
 
