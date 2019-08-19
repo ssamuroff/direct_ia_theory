@@ -33,3 +33,13 @@ promote_ia_term:
     <li><strong>Outputs:</strong> The same power spectrum, but now called something else in the data block P(k,z)</li>
 </ul>
 
+
+### likelihood
+
+add_1h_ia:
+<ul>
+    <li><strong>Summary:</strong> Computes a likelihood for some combination of wgg, wg+ and w++ 2pt data. Scale cuts and ordering specified in the params file.</li>
+    <li><strong>Language:</strong> python</li>
+    <li><strong>Inputs:</strong> Theory correlations wgg, wg+, w++; data vector wgg', wg+', w++'; covariance matrix C.</li>
+    <li><strong>Outputs:</strong> A likelihood and a chi2.</li>
+</ul>
