@@ -77,10 +77,10 @@ def execute(block, config):
 
         #import pdb ; pdb.set_trace()
         if (c=='wgg'):
-            W = X.wgg_calc(f=fz, bg=ba, bg2=bb, pk=Pnew, xi=None, l=[0,2,4])
+            W = X.wgg_calc(f=fz, bg=ba, bg2=bb, pk=Pnew, xi=None, l=[0,2,4]) #  * ba * bb
             za, K = get_redshift_kernel(block, 0, 0, X.rp, z, s1, s2)
         elif (c=='wgp'):
-            W = X.wgm_calc(f=fz, bg=ba, beta2=-1., pk=-Pnew, xi=None, l=[0,2,4])
+            W = X.wgm_calc(f=fz, bg=ba, beta2=-1., pk=-Pnew, xi=None, l=[0,2,4])  * ba
             za, K = get_redshift_kernel(block, 0, 0, X.rp, z, s1, s2)
         
         integrand = K.T * W
