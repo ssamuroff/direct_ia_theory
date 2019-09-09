@@ -38,7 +38,7 @@ def setup(options):
 
     for i,z0 in enumerate(redshifts):
         for corr in corrs_to_use:
-            if (corr in done2): #and (isinstance(redshifts,tuple)):
+            if (corr in done2 and (i==0)):
                 continue
  
             dvec = data_all[corr].read()
@@ -116,7 +116,10 @@ def parse_cuts(redshifts, corrs_to_use, R, options):
             # Now assess which of the bins passes the chosen set of scale cuts
             #import pdb ; pdb.set_trace()
             rlower,rupper = rmin[count], rmax[count]
-            scale_window = (R[count]>rlower) & (R[count]<rupper)
+            try:
+                scale_window = (R[count]>rlower) & (R[count]<rupper)
+            except:
+                import pdb ; pdb.set_trace()
             mask1d.append(scale_window)
             count+=1
 
