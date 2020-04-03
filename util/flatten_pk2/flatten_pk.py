@@ -1,28 +1,11 @@
 from __future__ import print_function
-import limber_fn as limber
-from gsl_wrap import GSLSpline
 from builtins import range
 from cosmosis.datablock import names, option_section
-#from gsl_wrappers import GSLSpline, NullSplineError, GSLSpline2d, BICUBIC
 import sys
 import numpy as np
 import scipy.interpolate as spi
 import scipy.integrate as sint
 import scipy.special as sps
-
-
-kernel_dict = {'galaxy_intrinsic_power': ('N','N'),
-               'galaxy_intrinsic_power_1h': ('N','N'),
-               'magnification_intrinsic_power': ('W', 'N'), 
-               'magnification_shear_power' : ('W','W'),
-               'matter_galaxy_power': ('N', 'W'),
-               'magnification_power' : ('W','W'),
-               'galaxy_power' : ('N','N'),
-               'nlgal_power' : ('N','N'),
-               'magnification_galaxy_power' : ('W', 'N'),
-               'intrinsic_power' : ('N', 'N'),
-               'shear_power' : ('W', 'W'),
-               'matter_intrinsic_power' : ('W', 'N')}
 
 def setup(options):
 
@@ -30,15 +13,6 @@ def setup(options):
     sample_a = options.get_string(option_section, "sample_a", default="source")
     sample_b = options.get_string(option_section, "sample_b", default="lens")
     window_function = options.get_bool(option_section, "window_function", default=False)
-    if not window_function:
-    	redshift = options[option_section, "redshift"]
-    	if isinstance(redshift, float):
-    		redshift = [redshift]
-    else:
-    	redshift = None
-    add_bias = options.get_bool(option_section, "add_bias", default=False)
-    add_rsd = options.get_bool(option_section, "add_rsd", default=False)
-    add_ia = options.get_bool(option_section, "add_intrinsic_alignments", default=False)
 
     return power_spectrum_name, redshift, add_bias, add_ia, add_rsd, window_function, sample_a, sample_b
 
@@ -85,69 +59,11 @@ def apply_bias(block, pkname, sample_a, sample_b, redshift, pk, add_bias):
 	else:
 		raise ValueError('Unknown power spectrum type: %s'%pkname)
 
-def magnification_prefactor(block, n):
-	alpha = block['galaxy_luminosity_function', 'alpha_binned']
-	K = 2 * (alpha - 1)**n
-	return K 
-
-
-def get_pk(block, power_spectrum_name):
-	if (power_spectrum_name, 'p_k') in block.keys():
-		name = power_spectrum_name
-		K = 1.
-
-	elif (power_spectrum_name=='magnification_power'):
-		name = 'matter_power_nl'
-		K = magnification_prefactor(block, 2)
-
-	elif (power_spectrum_name=='magnification_intrinsic_power'):
-		name = 'matter_intrinsic_power'
-		K = magnification_prefactor(block, 1)
-
-	elif (power_spectrum_name=='magnification_shear_power'):
-		name = 'matter_power_nl'
-		K = magnification_prefactor(block, 1)
-
-	elif (power_spectrum_name=='magnification_galaxy_power'):
-		name = 'matter_galaxy_power'
-		K = magnification_prefactor(block, 1)
-
-	elif (power_spectrum_name=='matter_galaxy_power'):
-		name = 'matter_galaxy_power'
-		K = 1.
-	elif (power_spectrum_name=='galaxy_intrinsic_power'):
-		name = 'galaxy_intrinsic_power'
-		K = 1.
-
-	elif (power_spectrum_name=='shear_power'):
-		name = 'matter_galaxy_power'
-		K = 1.
-
-	elif (power_spectrum_name=='matter_intrinsic_power'):
-		name = 'matter_intrinsic_power'
-		K = 1.
-
-	elif (power_spectrum_name=='intrinsic_power'):
-		name = 'shear_power_ii'
-		K = 1.
-
-	else:
-		print('Unrecognised power spectrum: %s'%power_spectrum_name)
-		import pdb ; pdb.set_trace()
-
-	z,k,P =block.get_grid(name, 'z', 'k_h', 'p_k')
-	P*=K
-
-	return z, k, P
-
-
 
 def execute(block, config):
 	power_spectrum_name, redshift, add_bias, add_ia, add_rsd, window_function, sample_a, sample_b = config
 
-	z,k,pk = get_pk(block, power_spectrum_name) 
-	#block.get_grid(power_spectrum_name, 'z', 'k_h', 'p_k')
-	#
+	z,k,pk = block.get_grid(power_spectrum_name, 'z', 'k_h', 'p_k')
 
 	if len(pk[pk>0])==len(pk):
 		logint = True
@@ -206,19 +122,21 @@ def execute(block, config):
 		except:
 			pass
 
-		kernel1, kernel2 = kernel_dict[power_spectrum_name]
-
 		#Now loop over bin pairs
 		for i in range(na):
+			nz_a = block['nz_%s'%sample_a, 'bin_%d'%(i+1)]
+			za = block['nz_%s'%sample_a, 'z']
 			for j in range(nb):
+				nz_b = block['nz_%s'%sample_b, 'bin_%d'%(j+1)]
+				zb = block['nz_%s'%sample_b, 'z']
 
-				za, nz_a = choose_kernel(block, kernel1, sample_a, i)
-				zb, nz_b = choose_kernel(block, kernel2, sample_b, j)
+				if len(za)!=len(zb):
+					interp_nz = spi.interp1d(zb, nz_b)
+					nz_b = interp_nz(za)
+					#raise ValueError('Redshift sampling does not match!')
 
 				x = interp_chi(za)
 				dxdz = interp_dchi(za)
-
-				#import pdb ; pdb.set_trace()
 
 				X = nz_a * nz_b/x/x/dxdz
 				interp_X = spi.interp1d(za, X)
@@ -244,49 +162,10 @@ def execute(block, config):
 				Pw = sint.trapz(integrand,za,axis=0) / sint.trapz(W2d.T,za,axis=0)
 
 				block.put_double_array_1d(output_section_name, 'p_k_%d_%d_%s_%s'%(i+1,j+1,sample_a,sample_b), Pw)
-        #import pdb ; pdb.set_trace()
+
 	return 0
 
 
 
 
-def choose_kernel(block, kernel_type, sample, i):
-
-
-	nz = block['nz_%s'%sample, 'bin_%d'%(i+1)]
-	z = block['nz_%s'%sample, 'z']
-
-	if (kernel_type=='N'):
-		return z, nz
-	elif (kernel_type=='W'):
-
-		chi_distance = block['distances', 'd_m']
-		a_distance = block['distances', 'a']
-		z_distance = block['distances', 'z']
-
-		if (z_distance[1] < z_distance[0]):
-			z_distance = z_distance[::-1].copy()
-			a_distance = a_distance[::-1].copy()
-			chi_distance = chi_distance[::-1].copy()
-
-		h0 = block[names.cosmological_parameters, "h0"]
-		# convert Mpc to Mpc/h
-		chi_distance *= h0
-		chi_max = chi_distance.max()
-
-		a_of_chi = GSLSpline(chi_distance, a_distance)
-		chi_of_z = GSLSpline(z_distance, chi_distance)
-
-		W = limber.get_named_w_spline(block, 'nz_%s'%sample, i+1, z, chi_max, a_of_chi)
-		X = chi_of_z(z)
-
-		return z, W(X)/np.trapz(W(X),z)
-
-
-
-#
-#	if len(za)!=len(zb):
-#		interp_nz = spi.interp1d(zb, nz_b)
-#		nz_b = interp_nz(za)
-					
 

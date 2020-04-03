@@ -28,11 +28,11 @@ typedef enum {comp_c=0, comp_b=1, comp_nu=2} comp_t;
 #define NCOMP 3
 
 /* The following scales are Used for Hankel transforms */
-#define rp_min 0.001
-#define rp_max 200.0
+#define rp_min 0.0000001
+#define rp_max 300.0
 
-#define k_min     1.0e-5
-#define k_max     1000.0
+#define k_min     1e-5
+#define k_max     28000.0
 
 /* Size of fast Hankel transform arrays (from lensing.h) */
 #define N_thetaH  1024

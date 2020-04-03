@@ -16,7 +16,7 @@ const char * shear_xi = SHEAR_XI_SECTION;
 const char * shear_cl = SHEAR_CL_SECTION;
 const char * wl_nz = WL_NUMBER_DENSITY_SECTION;
 
-typedef enum {gp=0, pp=1, mp=2, gg=3, mm=4, gp1h=5} corr_type_t;
+typedef enum {gp=0, pp=1, mp=2, gg=3, mm=4, gp1h=5, ggnl=6} corr_type_t;
 
 typedef struct ia_config {
 	char * input_section;
@@ -58,6 +58,10 @@ void * setup(c_datablock * options)
 	}
 	else if (corr_type==gg){
 	  status |= c_datablock_get_string_default(options, OPTION_SECTION, "input_section_name", "galaxy_power_projected", &(config->input_section));
+	  status |= c_datablock_get_string_default(options, OPTION_SECTION, "output_section_name", "galaxy_w", &(config->output_section));
+	}
+	else if (corr_type==ggnl){
+	  status |= c_datablock_get_string_default(options, OPTION_SECTION, "input_section_name", "nlgal_power_projected", &(config->input_section));
 	  status |= c_datablock_get_string_default(options, OPTION_SECTION, "output_section_name", "galaxy_w", &(config->output_section));
 	}
 	else if (corr_type==mp){
@@ -187,7 +191,7 @@ int execute(c_datablock * block, void * config_in)
 				    tpstat = tp_gt;
 				    sprintf(name, "w_rp_%d_%d_%s_%s", i_bin, j_bin, config->sample_a, config->sample_b);
 				    snprintf(name_w1, 64, name);
-				    coeff = -1.0 ; // * sqrt(2) ;///2.0/PI;
+				    coeff = -1. ; //sqrt(2) ;///2.0/PI;
 				    break;
 				case gp1h:
 				    tpstat = tp_w;
@@ -202,6 +206,12 @@ int execute(c_datablock * block, void * config_in)
 				    coeff = 1.0 ; //2.0 * 2.0 * PI; ///4.0/PI;
 				    break;
 				case gg:
+				    tpstat = tp_w;
+				    sprintf(name, "w_rp_%d_%d_%s_%s", i_bin, j_bin, config->sample_a, config->sample_b);
+				    snprintf(name_w1, 64, name);
+				    coeff = 1.0 ; //1.0/2.0/PI;
+				    break;
+				case ggnl:
 				    tpstat = tp_w;
 				    sprintf(name, "w_rp_%d_%d_%s_%s", i_bin, j_bin, config->sample_a, config->sample_b);
 				    snprintf(name_w1, 64, name);

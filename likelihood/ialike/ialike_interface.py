@@ -5,6 +5,9 @@ import sys
 import fitsio as fi
 import numpy as np
 import scipy.interpolate as spi
+import pylab as plt
+plt.switch_backend('pdf')
+plt.style.use('y1a1')
 
 block_names = {'wgp':'galaxy_intrinsic_w', 'wpp':'intrinsic_w', 'wgg':'galaxy_w'}
 
@@ -36,8 +39,9 @@ def setup(options):
     data_all = fi.FITS(filename)
     done2=[]
 
-    for i,z0 in enumerate(redshifts):
-        for corr in corrs_to_use:
+    
+    for corr in corrs_to_use:
+        for i,z0 in enumerate(redshifts):
             if (corr in done2 and (i==0)):
                 continue
  
@@ -69,6 +73,8 @@ def setup(options):
 
             print("%s, redshift %d: found %d points"%(corr, i, npt))
             done2.append(corr)
+
+    #import pdb ; pdb.set_trace()
 
     mask1d = parse_cuts(redshifts, corrs_to_use, R, options)
 
@@ -122,6 +128,7 @@ def parse_cuts(redshifts, corrs_to_use, R, options):
                 import pdb ; pdb.set_trace()
             mask1d.append(scale_window)
             count+=1
+            #print(count)
 
     # Flatten into 1D
     mask1d = np.concatenate(mask1d)
@@ -139,8 +146,9 @@ def execute(block, config):
     # Now construct the theory data vector
     y = []
     count=0
-    for z0 in redshifts:
-        for corr, (s1,s2) in zip(corrs_to_use,samples_to_use):
+    
+    for corr, (s1,s2) in zip(corrs_to_use,samples_to_use):
+        for z0 in redshifts:
             section = block_names[corr]
 
             if isinstance(z0,tuple):
@@ -156,7 +164,10 @@ def execute(block, config):
             else:
                 interpolator = spi.interp1d(np.log10(xf), Y)
                 ylog = False
-                y_resampled = interpolator(np.log10(R[count]))
+                try:
+                    y_resampled = interpolator(np.log10(R[count]))
+                except:
+                    import pdb ; pdb.set_trace()
 
             y.append(y_resampled)
             count+=1
@@ -170,7 +181,7 @@ def execute(block, config):
     chi2 = float(chi2)
     like = -0.5*chi2
 
-    #import pdb ; pdb.set_trace()
+   # import pdb ; pdb.set_trace()
 
 
     block[names.data_vector, 'iacorr'+"_CHI2"] = chi2
