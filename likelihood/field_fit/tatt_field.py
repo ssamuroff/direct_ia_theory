@@ -1,129 +1,163 @@
-from __future__ import print_function
-from builtins import range
 from cosmosis.datablock import names, option_section
-import sys
 import fitsio as fi
 import numpy as np
-import scipy.interpolate as spi
-import pylab as plt
-plt.switch_backend('pdf')
-plt.style.use('y1a1')
+import numpy.fft as npf
 
-block_names = {'wgp':'galaxy_intrinsic_w', 'wpp':'intrinsic_w', 'wgg':'galaxy_w'}
 
-def compute_c1_baseline():
-    C1_M_sun = 5e-14  
-    M_sun = 1.9891e30  
-    Mpc_in_m = 3.0857e22  
-    C1_SI = C1_M_sun / M_sun * (Mpc_in_m)**3  
-    
-    G = 6.67384e-11  
-    H = 100  
-    H_SI = H * 1000.0 / Mpc_in_m 
-    rho_crit_0 = 3 * H_SI**2 / (8 * np.pi * G)
-    f = C1_SI * rho_crit_0
-    return f
-
-C1_RHOCRIT = compute_c1_baseline()
-#snapshot = 99
-#CONST = -0.005616
+# these are computed at the TNG cosmology
 CONST = -0.005307
 CONST2 = 0.033832
 
 
 def setup(options):
 
-    loc = options.get_string(option_section, "tensor_dir")
+    base = options.get_string(option_section, "tensor_dir")
     snapshot = options.get_int(option_section, "snapshot")
-    resolution = options.get_int(option_section, "resolution")
+    nx = options.get_int(option_section, "resolution") # pixel resolution 128, 64, 32, 16
 
-    gamma_I = fi.FITS(loc+'/stellar_shape_vects_0%d_%d.fits'%(snapshot, resolution))[-1].read()
-    sij = -1. * fi.FITS(loc+'/dm_tidal_vects_0%d_0.25_%d.fits'%(snapshot, resolution))[-1].read()
-    dsij = -1. * fi.FITS(loc+'/star_tidal_vects_0%d_0.25_%d.fits'%(snapshot, resolution))[-1].read()
+  #  base='/home/rmandelb.proj/ssamurof/tng_tidal/'
 
-    #svals = fi.FITS(loc+'/dm_tidal_vals_0%d_0.25.fits'%snapshot)[-1].read()
+    # gridded particle density data
+    nxyz = fi.FITS('%s/density/dm_density_0%d_%d.fits'%(base,snapshot,nx))[-1].read()
+    gxyz = fi.FITS('%s/density/star_density_0%d_%d.fits'%(base,snapshot,nx))[-1].read()
 
+    
 
-    s2 = np.linalg.det(sij)
-    s2 = s2 * s2
-    # cut out the cells with no galaxies
-    mask = (gamma_I!=0)
-    mask2 = (gamma_I[:,:,:,0,0]!=0)
-    s2 = s2[mask2]
+    # overdensity field
+    d = nxyz/np.mean(nxyz) -1 
+    g = gxyz/np.mean(gxyz) -1 
 
-    npix = len(s2)
-    sij = sij[mask].reshape((npix,3,3))
-    dsij = dsij[mask].reshape((npix,3,3))
-    gamma_I = gamma_I[mask].reshape((npix,3,3))
+    tidal_tensor = np.zeros((nx,nx,nx,3,3),dtype=np.float32)
+    galaxy_tidal_tensor = np.zeros((nx,nx,nx,3,3),dtype=np.float32)
 
-    sigma = np.zeros_like(gamma_I)
+    # FFT the box
+    fft_dens = npf.fftn(d) 
+    galaxy_fft_dens = npf.fftn(g) 
+
+    A=1. #/2/np.pi #/(2.*np.pi)**3 
+
+    # now compute the tidal tensor
+    k  = npf.fftfreq(nx)[np.mgrid[0:nx,0:nx,0:nx]]
+
     for i in range(3):
-        sigma[:,i,:] = np.std(gamma_I[:,i,:])
+        for j in range(3):
+            print(i,j)
+            # k[i], k[j] are 3D matrices
+            temp = fft_dens * k[i]*k[j]/(k[0]**2 + k[1]**2 + k[2]**2)
+            galaxy_temp = galaxy_fft_dens * k[i]*k[j]/(k[0]**2 + k[1]**2 + k[2]**2)
 
-    #import pdb ; pdb.set_trace()
+            # subtract off the trace...
+            if (i==j):
+                temp -= 1./3 * fft_dens
+                galaxy_temp -= 1./3 * galaxy_fft_dens
 
-    S = np.array([np.diag([np.linalg.det(s)]*3) for s in sij]).flatten()
-    S2 = 1./3*S*S
+            temp[0,0,0] = 0
+            tidal_tensor[:,:,:,i,j] = A * npf.ifftn(temp).real
 
-    sumsij = np.array([ [ [[np.sum(s0[axis1,:]*s0[:,axis2]) for axis2 in range(3)] for axis1 in range(3)]] for s0 in sij])
-    sumsij = sumsij.flatten()
+            galaxy_temp[0,0,0] = 0
+            galaxy_tidal_tensor[:,:,:,i,j] = A * npf.ifftn(galaxy_temp).real
 
-    return gamma_I, sigma, sij, dsij, S2, sumsij
+    print('loading shapes')
+    gammaI = load_gamma(nx)
 
-def delta(i,j):
-    if (i==j):
-        return 1
-    else:
-        return 0
+    
+    return gammaI, tidal_tensor, galaxy_tidal_tensor
 
-#CONST = -0.005616
+
 
 def execute(block, config):
-    gamma_I, sigma, sij, dsij, S2, sumsij = config
+    gammaI, tidal_tensor, galaxy_tidal_tensor = config
 
     A1 = block['intrinsic_alignment_parameters', 'A1']
     A2 = block['intrinsic_alignment_parameters', 'A2']
-    bg = block['intrinsic_alignment_parameters', 'bias_ta']
-
-
-    print(A1,A2,bg)
 
     C1 = A1 * CONST 
     C2 = A2 * CONST2
 
-    T = C1 * sij.flatten() + bg * C1 * dsij.flatten() + C2 * (sumsij - S2)
-    chi2 = (gamma_I.flatten() - T )**2 
-    chi2 = chi2 / sigma.flatten() / sigma.flatten()
+    bias_ta = block['intrinsic_alignment_parameters', 'bias_ta']
+    C1d = bias_ta * C1 
+
+    print(A1)
+
+    D = gammaI[:,:,:,0,0].flatten()
+    x = tidal_tensor[:,:,:,0,0].flatten()
+    gx = galaxy_tidal_tensor[:,:,:,0,0].flatten()
+    T = (C1 * x) + (C1d*gx)
+
+    mask = (D!=-9999) # mask out cells with no galaxies
+
+    # assume just shape noise for the covariance
+    # this is a bit hacked, but will do for the moment
+    dy = np.ones_like(D) * np.std(D[mask])
+
+    chi2 = (D[mask] - T[mask] )**2
+    chi2 = chi2 / dy[mask] / dy[mask]
     chi2 = np.sum(chi2)
+
 
     like = -0.5 * chi2
 
     print('chi2 = %3.3f'%chi2)
-    print('(reduced = %3.3f)'%(chi2/(len(T) - 3)))
+    print('(reduced = %3.3f)'%(chi2/(len(T) - 1)))
 
     block[names.data_vector, 'tatt_direct'+"_CHI2"] = chi2
     block[names.likelihoods, 'tatt_direct'+"_LIKE"] = like
-    import pdb ; pdb.set_trace()
-
+    
 
     return 0
 
+def get_trace_free_matrix(I):
+    ndim = len(I[0])   
+    T = np.matrix.trace(I)
+    K = 1./float(ndim) * T * np.identity(ndim)
+    I_TF = I - K
+    return I_TF
 
 
+def load_gamma(nx):
+    # this is a subhalo shape catalogue
+    # one entry per galaxy
+    cat=fi.FITS('/home/ssamurof/hydro_ias/data/cats/fits/TNG300-1_99_non-reduced_galaxy_shapes.fits')[-1].read()
+
+    ngal = len(cat['x'])
+    gammaI = np.zeros((nx,nx,nx,3,3))
+    num = np.zeros((nx,nx,nx,3,3))
 
 
+    X,Y,Z = np.meshgrid(np.arange(0,nx,1),np.arange(0,nx,1),np.arange(0,nx,1))
+    B = np.linspace(0,300*0.69,nx+1)
+    lower,upper = B[:-1],B[1:]
 
+    # Compute the shape cube by adding galaxies one at a time to cells
+    for i in range(ngal):
+        #print ("Processing galaxy %d/%d"%(i,ngal))
 
+        # put this galaxy into a cell
+        info = cat[i]
+        ix = np.argwhere((cat['x'][i]>=lower) & (cat['x'][i]<upper))[0,0]
+        iy = np.argwhere((cat['y'][i]>=lower) & (cat['y'][i]<upper))[0,0]
+        iz = np.argwhere((cat['z'][i]>=lower) & (cat['z'][i]<upper))[0,0]
 
+        # reconstruct the 3x3 shape matrix for this galaxy
+        a0 = np.array([cat['av_x'][i],cat['av_y'][i],cat['av_z'][i]])
+        b0 = np.array([cat['bv_x'][i],cat['bv_y'][i],cat['bv_z'][i]])
+        c0 = np.array([cat['cv_x'][i],cat['cv_y'][i],cat['cv_z'][i]])
+        V = np.diag(np.array([cat['a'][i]**2, cat['b'][i]**2, cat['c'][i]**2]))
+        v = np.array([a0,b0,c0])
+        v0=np.linalg.inv(v)
+        I = np.dot(v0,np.dot(V,v))
 
+        I_TF = get_trace_free_matrix(I)
 
+        # add it to the correct cell
+        gammaI[ix,iy,iz,:,:] += I_TF
+        num[ix,iy,iz,:,:] += 1
 
+    gammaI /= num
+    gammaI[np.isinf(gammaI)]=-9999.
+    gammaI[np.isnan(gammaI)]=-9999.
 
-
-
-
-
-
+    return gammaI
 
 
 
