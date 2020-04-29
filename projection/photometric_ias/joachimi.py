@@ -135,7 +135,7 @@ def get_lensing_terms(block, input_name, do_lensing, do_magnification, ell, P_fl
         if (sum(pz1*pz2)==0):
             C_gI = np.zeros_like(ell)
         else:
-            C_gI = do_limber_integral(ell, P_gI, pz1, pz2, X)
+            C_gI = K_gI * do_limber_integral(ell, P_gI, pz1, pz2, X)
 
             
 
@@ -370,7 +370,7 @@ def execute(block, config):
                 x2,pz2 = gaussian(z2, sigma=sigma_b)
                 pz2 /= np.trapz(pz2,X)
                 
-                Cell = do_limber_integral(ell, P_flat[input_name], pz1, pz2, X)
+                Cell = coeff(block, sample_a, sample_b,  input_name) * do_limber_integral(ell, P_flat[input_name], pz1, pz2, X)
                 Cell += get_lensing_terms(block, input_name, do_lensing, do_magnification, ell, P_flat, pz1, pz2, X, chi_of_z_spline(z1), chi_of_z_spline(z2), z1, z2, az, sample_a, sample_b)
 
             
@@ -406,7 +406,7 @@ def execute(block, config):
             C = cl_vec[i,j,:]
             #import pdb ; pdb.set_trace()
             if (nu==0):
-                xi = - (np.pi/2/np.sqrt(1.04)) * ccl.correlation(cosmology, ell, C, theta_degrees, corr_type='GL', method='FFTLog')
+                xi = - (np.pi/np.sqrt(1.04)*np.sqrt(np.pi/2))/1.77 * ccl.correlation(cosmology, ell, C, theta_degrees, corr_type='GL', method='FFTLog')
 
                 #rp, xi = transform.projected_correlation(ell, C, j_nu=2, taper=True)
                 #xi = 10**interp1d(np.log10(rp), np.log10(-xi))(np.log10(rp_vec))
@@ -415,7 +415,8 @@ def execute(block, config):
             elif (nu==2):
                 xi_0 = ccl.correlation(cosmology, ell, C, theta_degrees, corr_type='L+', method='FFTLog')
                 xi_4 = ccl.correlation(cosmology, ell, C, theta_degrees, corr_type='L-', method='FFTLog')
-                xi = (np.pi/2/1.08)*(xi_0 + xi_4)
+                xi = (1./2/1.08/np.sqrt(np.pi/2))*(xi_0 + xi_4) #/np.sqrt(2)
+                #(np.pi/2/1.08)*(xi_0 + xi_4)
 
             xi_vec[i,j,:] = xi
             xi_vec[i,j_flipped,:] = xi # by symmetry
@@ -772,4 +773,11 @@ def get_redshift_kernel(block, i, j, z0, x, sample_a, sample_b):
     return z0,W
 
 
+def coeff(block, sample_a, sample_b,  input_name) :
+    if (input_name=='galaxy_intrinsic_power'):
+        return block['bias_parameters','b_%s'%sample_a]
+    elif (input_name=='galaxy_power'):
+        return block['bias_parameters','b_%s'%sample_a]*block['bias_parameters','b_%s'%sample_b]
+    elif (input_name=='intrinsic_power'):
+        return 1.
 

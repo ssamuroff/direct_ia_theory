@@ -20,7 +20,7 @@ def setup(options):
     sample_b = options.get_string(option_section, "sample_b", default="lens source").split()
     rmin = options.get_double(option_section, "rpmin", default=0.01)
     rmax = options.get_double(option_section, "rpmax", default=500.)
-    nr = options.get_int(option_section, "nr", default=200)
+    nr = options.get_int(option_section, "nr", default=1024)
     nk = options.get_int(option_section, "nk", default=200)
 
     rp = np.logspace(np.log10(rmin), np.log10(rmax), nr)
@@ -148,7 +148,7 @@ def execute(block, config):
         try:
         	block.put_double_array_1d(section, 'r_p', X.rp)
         except:
-        	pass 
+        	block.replace_double_array_1d(section, 'r_p', X.rp) 
 
 
     return 0
