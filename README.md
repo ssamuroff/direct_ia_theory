@@ -1,6 +1,7 @@
-# direct_ia_theory
+# Direct IA Theory
 Code for IA modelling. The modules here are designed to be plugged into a CosmoSIS pipeline.
 
+Quite a bit of this stuff borrows and adapts from other people's codes. If you're interested in using this for published work, it's probably best if you get in touch with me (ssamurof@andrew.cmu.edu); I'd be happy to find the appropriate references.
 
 
 ## Contents:
