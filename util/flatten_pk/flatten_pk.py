@@ -173,8 +173,13 @@ def execute(block, config):
 			pk_interpolated = apply_ia(block, power_spectrum_name, z0, pk_interpolated, add_ia)
 			pk_interpolated = apply_bias(block, power_spectrum_name, None, None, z0, pk_interpolated, add_bias)
 
-			block.put_double_array_1d(power_spectrum_name+'_%2.3f'%z0, 'p_k', pk_interpolated)
-			block.put_double_array_1d(power_spectrum_name+'_%2.3f'%z0, 'k_h', k)
+			try:
+				block.put_double_array_1d(power_spectrum_name+'_%2.3f'%z0, 'p_k', pk_interpolated)
+				block.put_double_array_1d(power_spectrum_name+'_%2.3f'%z0, 'k_h', k)
+
+			except:
+				block.replace_double_array_1d(power_spectrum_name+'_%2.3f'%z0, 'p_k', pk_interpolated)
+				block.replace_double_array_1d(power_spectrum_name+'_%2.3f'%z0, 'k_h', k)
 			#import pdb ; pdb.set_trace()
 
 	# Slightly more complicated case: project P(k,z) along the redshift axis,

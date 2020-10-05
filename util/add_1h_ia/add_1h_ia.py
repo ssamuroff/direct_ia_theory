@@ -18,13 +18,16 @@ def execute(block, config):
     if mode=='w':
         # one halo term(s)
         gi_1h = block['galaxy_intrinsic_w_1h', 'w_rp_1h_1_1_%s_%s'%(sample_a,sample_b)]
+        x1h = block['galaxy_intrinsic_w_1h', 'r_p']
 
         # two halo term(s)
         gi_2h = block['galaxy_intrinsic_w', 'w_rp_1_1_%s_%s'%(sample_a,sample_b)]
+        x2h = block['galaxy_intrinsic_w', 'r_p']
+
+        gi_1h_resampled = (spi.interp1d(np.log10(x1h),gi_1h)(np.log10(x2h)) )
 
         # add them together and save to the data block
-        # the sampling should be the same, so we shouldn't need to interpolate
-        gi = gi_1h + gi_2h
+        gi = gi_1h_resampled + gi_2h
 
         block.replace_double_array_1d('galaxy_intrinsic_w', 'w_rp_1_1_%s_%s'%(sample_a,sample_b), gi)
 

@@ -66,7 +66,7 @@ def setup(options):
     nell = options.get_double(option_section, "nell", default=800)
 
     # binning
-    pimax = options.get_double(option_section, "pimax", default=500.) # in h^-1 Mpc
+    pimax = options.get_double(option_section, "pimax", default=68.) # in h^-1 Mpc
 
     # order of the Bessel function used in the Hankel transform
     nu = options.get_int(option_section, "bessel_type", default=2)
@@ -435,6 +435,7 @@ def execute(block, config):
     # integrate over line of sight separation
     
     mask = ((Pi<pimax) & (Pi>-pimax))
+    print('pi_max=%3.3f'%pimax)
     xi_pi_rp = np.trapz(xi_vec[:,mask,:], Pi[mask], axis=1)
 
     # and then over redshift

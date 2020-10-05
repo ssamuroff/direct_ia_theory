@@ -10,8 +10,6 @@ import pylab as plt
 plt.switch_backend('pdf')
 plt.style.use('y1a1')
 
-block_names = {'wgp':'galaxy_intrinsic_w', 'wpp':'intrinsic_w', 'wgg':'galaxy_w'}
-
 def compute_c1_baseline():
     C1_M_sun = 5e-14  
     M_sun = 1.9891e30  
@@ -82,6 +80,8 @@ def load_gamma(nx):
     gammaI /= num
     gammaI[np.isinf(gammaI)]=-9999.
     gammaI[np.isnan(gammaI)]=-9999.
+    gammaI[(num==1)]=-9999.
+
 
 
     dgammaI = np.zeros((nx,nx,nx,3,3))
@@ -145,10 +145,14 @@ def setup(options):
 
     # FFT the box
     fft_dens = npf.fftn(d) 
-    galaxy_fft_dens = npf.fftn(g) 
+    galaxy_fft_dens = npf.fftn(g)
 
-    A=1./2/np.pi #/(2.*np.pi)**3 
-    #A = 1. #/(2.*np.pi)**3/5 #/(nx/32)**2
+    F = 2.85
+    A = 1./np.pi/np.pi/np.pi/2/2/2.
+  #  A=1.
+  #  A = F**(128./nx) /np.pi/np.pi/np.pi/2/2/300.
+
+
 
     for i in range(3):
         for j in range(3):
@@ -169,10 +173,55 @@ def setup(options):
 
     print('loading shapes')
     gammaI, dgammaI  = load_gamma(nx)
+   # import pdb ; pdb.set_trace()
+
+#    A = F**(64./nx) /np.pi/np.pi/np.pi/2/2/2.
+#    s0 = np.mean(tidal_tensor)
+#    tidal_tensor = A*tidal_tensor
+#    s1 = np.mean(tidal_tensor)
+#    tidal_tensor=tidal_tensor-s1+s0
+#
+    S = tidal_tensor.reshape(int(tidal_tensor.size/3./3.),3,3)
+    S2 = np.zeros_like(S)
+    delta_tidal = np.zeros_like(S)
+
+    for l,s in enumerate(S):
+        M = np.zeros((3,3))
+
+        # the density weighting term
+        # just rescale the tidal tensor by the normalised matter overdensity 
+        #import pdb ; pdb.set_trace()
+        delta_tidal[l,:,:] = s * d.flatten()[l]
+
+        for i in range(3):
+            for j in range(3):
+                M[i,j] = np.sum(s[i,:]*s[:,j])
+                if (i==j):
+                    M[i,j]-=(1./3)*np.linalg.det(s)**2
+
+        S2[l] = M
+        #print(l)
+
+    import pdb ; pdb.set_trace()
+
+   # S2=np.array(S2)
+
+
+
+    #S2 = np.array([np.dot(s,s) for s in S])
+#
+#    s0 = np.mean(galaxy_tidal_tensor)
+#    galaxy_tidal_tensor = A*galaxy_tidal_tensor
+#    s1 = np.mean(galaxy_tidal_tensor)
+#    galaxy_tidal_tensor=galaxy_tidal_tensor-s1+s0
+
+   # import pdb ; pdb.set_trace()
+
+
     #fi.FITS(base+'tidal/raw/star_tidal_traceless_0%d_0.25_%d.fits'%(snapshot,nx))[-1].read()
 
-    tidal_tensor*=np.std(tidal_tensor[tidal_tensor!=-9999.])**2
-    galaxy_tidal_tensor*=np.std(galaxy_tidal_tensor[galaxy_tidal_tensor!=-9999.])**2
+   # tidal_tensor*=np.std(tidal_tensor[tidal_tensor!=-9999.])**2
+   # galaxy_tidal_tensor*=np.std(galaxy_tidal_tensor[galaxy_tidal_tensor!=-9999.])**2
 
     #dgammaI= np.zeros_like(gammaI)
     #for i in range(3):
@@ -199,12 +248,12 @@ def setup(options):
             y22, dy22 = get_binned(2, gammaI, mask22, y22, dy22)
 
     
-    return gammaI, tidal_tensor, galaxy_tidal_tensor, dgammaI, x0, y00, y11, y22, dy00, dy11, dy22, use_binned
+    return delta_tidal, gammaI, tidal_tensor, galaxy_tidal_tensor, S2, dgammaI, x0, y00, y11, y22, dy00, dy11, dy22, use_binned
 
 
 
 def execute(block, config):
-    gammaI, tidal_tensor, galaxy_tidal_tensor, dgammaI, x0, y00, y11, y22, dy00, dy11, dy22, use_binned = config
+    delta_tidal, gammaI, tidal_tensor, galaxy_tidal_tensor, S2, dgammaI, x0, y00, y11, y22, dy00, dy11, dy22, use_binned = config
 
     A1 = block['intrinsic_alignment_parameters', 'A1']
     A2 = block['intrinsic_alignment_parameters', 'A2']
@@ -224,14 +273,17 @@ def execute(block, config):
         chi2 = chi2 / dy00 / dy00
 
     else:
-        #import pdb ; pdb.set_trace()
-        D = gammaI[:,:,:,0,0].flatten()
-        x = tidal_tensor[:,:,:,0,0].flatten()
-        gx = galaxy_tidal_tensor[:,:,:,0,0].flatten()
-        T = (C1 * x) + (C1d*gx)
+        D = gammaI[:,:,:,:,:].flatten()
+        dy=np.ones_like(D) * np.std(D[(D!=-9999.)]) * 2
+        mask = (D!=-9999)  
+
+        x = tidal_tensor[:,:,:].flatten()
+        x2 = S2[:,:,:].flatten()
+        deltaSij = delta_tidal[:,:,:].flatten()
+
+        T = (C1 * x) + (C1d*deltaSij) + (C2 * x2)
         #dy = dgammaI[:,:,:,0,0].flatten()
-        dy=np.ones_like(D) * np.std(gammaI[:,:,:,0,0][(gammaI[:,:,:,0,0]!=-9999.)])
-        mask = (D!=-9999)    #(CONST*x>-0.95) & (CONST*x<0.95)
+          #(CONST*x>-0.95) & (CONST*x<0.95)
         #np.array([gammaI[:,:,:,0,0].std()]*len(gammaI[:,:,:,0,0].flatten()))
         chi2 = (D[mask] - T[mask] )**2 
         chi2 = chi2 / dy[mask] / dy[mask]
