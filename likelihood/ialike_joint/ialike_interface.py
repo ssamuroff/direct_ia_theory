@@ -9,35 +9,24 @@ import pylab as plt
 plt.switch_backend('pdf')
 plt.style.use('y1a1')
 
-#ordering: gg, gp, pp
-pimax_corrections={'tng': {0:{'gg':0.974641,'gp':0.982287,'pp':0.985378},1:{'gg':0.981684,'gp':0.986832,'pp':0.988855},2:{'gg':0.979082,'gp':0.985709,'pp':0.988479},3:{'gg':0.978361,'gp':0.984973,'pp':0.987730}},
-                   'illustris': {0:{'gg':0.390854,'gp':0.393996,'pp':0.396007},1:{'gg':0.404012,'gp':0.404616,'pp':0.404172},2:{'gg':0.409620,'gp':0.411010,'pp':0.410383},3:{'gg':0.402978,'gp':0.405009,'pp':0.405595}},
-                   'mbii': {0:{'gg':0.666008,'gp':0.683459,'pp':0.691134},1:{'gg':0.686631,'gp':0.699460,'pp':0.703857},2:{'gg':0.690361,'gp':0.706124,'pp':0.710931},3:{'gg':0.682522,'gp':0.698526,'pp':0.704644}}}
-
 block_names = {'wgp':'galaxy_intrinsic_w', 'wpp':'intrinsic_w', 'wgg':'galaxy_w'}
 
 def setup(options):
 
-    use_limber = options.get_bool(option_section, "limber", default=True)
+
     apply_hartlap = options.get_bool(option_section, "apply_hartlap", default=True)
 
     filename = options.get_string(option_section, "datafile")
     corrs_to_use = options[option_section, "ctypes"].split()
     samples_to_use = options[option_section, "samples"].split()
-    redshifts = options[option_section, "redshifts"]
+    indices = options[option_section, "indices"]
 
-    apply_pimax = options.get_bool(option_section, "apply_pimax", default=True) 
-    if apply_pimax:
-        print('will apply Pi_max correction.')
+    cov_slices = options[option_section, "covariance_blocks"].split()
 
-    if isinstance(redshifts, float):
-        redshifts = np.atleast_1d(redshifts)
 
-    if isinstance(redshifts, unicode):
-        redshifts = list(np.atleast_1d(redshifts))
-        for i,z in enumerate(redshifts):
-            a,b = z.split(',')
-            redshifts[i] = (int(a),int(b))
+    indices = indices.split(',')
+    indices = [int(i) for i in indices]
+
 
     # convert samples to a list of tuples
     samples_to_use = [( str(s.split(',')[0].replace('(','')), str(s.split(',')[1].replace(')','')) ) for s in samples_to_use] 
@@ -49,48 +38,26 @@ def setup(options):
     done2=[]
 
     
+
+    
     for corr in corrs_to_use:
-        for i,z0 in enumerate(redshifts):
-            if (corr in done2 and (i==0)):
-                continue
- 
-            dvec = data_all[corr].read()
-            if 'SAMPLE1' in dvec.dtype.names:
-                sample1 = dvec['SAMPLE1']
-                sample2 = dvec['SAMPLE2']
-            else:
-                sample1 = [0]
-                sample2 = [0]
+        dvec = data_all[corr].read()
+        for i in indices:
 
-
+            #import pdb ; pdb.set_trace()
             done = []
             npt = 0
-           # import pdb ; pdb.set_trace()
-            sind = np.argsort(sample1)
-            if len(sind)>1:
-                sample1 = sample1[sind]
-                sample2 = sample2[sind]
-            for s1,s2 in zip(sample1,sample2):
-                if ('%d%d'%(s1,s2) in done):
-                    continue
 
-                if 'BIN' in dvec.dtype.names:
-                    mask = (dvec['BIN']==i)
-                else:
-                    mask = (dvec['BIN1']==z0[0]) & (dvec['BIN2']==z0[1]) & (dvec['SAMPLE1']==s1) & (dvec['SAMPLE2']==s2) 
+            mask = (dvec['BIN']==i)
 
-                data.append(dvec['VALUE'][mask])
-                R.append(dvec['SEP'][mask])
-                done.append('%d%d'%(s1,s2))
-                npt+=len(dvec['SEP'][mask])
+            data.append(dvec['VALUE'][mask])
+            R.append(dvec['SEP'][mask])
+            npt+=len(dvec['SEP'][mask])
 
-
-            print("%s, redshift %d: found %d points"%(corr, i, npt))
+            print("%s, index %d: found %d points"%(corr, i, npt))
             done2.append(corr)
 
-    #import pdb ; pdb.set_trace()
-
-    mask1d = parse_cuts(redshifts, corrs_to_use, R, options)
+    mask1d = parse_cuts(indices, corrs_to_use, R, options)
 
     data = np.concatenate(data)
     #import pdb ; pdb.set_trace()
@@ -102,9 +69,25 @@ def setup(options):
     # if we don't want to have to invert the covariance matrix
     # at every step in parameter space
     cov0 = fi.FITS(filename)['COVMAT'].read()
-    #import pdb ; pdb.set_trace()
-    cov = np.array([row[mask1d] for row in cov0])
+
+    COV = np.zeros((len(R)*len(R[0]), len(R)*len(R[0]))) + 1e-8
+
+    #k0 = 0 
+    nr = len(R[0])
+
+    for k0,thing in enumerate(cov_slices):
+        a0,b0=thing.replace('(','').replace(')','').split(',')
+        a0 = int(a0)
+        b0 = int(b0)
+        COV[k0*nr:(k0+1)*nr,k0*nr:(k0+1)*nr] = cov0[a0:b0,a0:b0]
+
+      #  k0+=1
+
+
+    cov = np.array([row[mask1d] for row in COV])
     cov = np.array([col[mask1d] for col in cov.T])
+
+    #import pdb ; pdb.set_trace()
 
     invcov = np.linalg.inv(cov)
 
@@ -121,7 +104,7 @@ def setup(options):
         invcov = invcov / alpha
         #import pdb ; pdb.set_trace()
 
-    return redshifts, corrs_to_use, samples_to_use, R, data, invcov, mask1d, use_limber, apply_pimax
+    return indices, corrs_to_use, samples_to_use, R, data, invcov, mask1d
 
 def parse_cuts(redshifts, corrs_to_use, R, options):
     rmin = np.atleast_1d(options[option_section, 'rmin'])
@@ -131,18 +114,18 @@ def parse_cuts(redshifts, corrs_to_use, R, options):
 
     mask1d = []
     count = 0
-    for z0 in redshifts:
-        for corr in corrs_to_use:
+    
+    for corr in corrs_to_use:
+        for z0 in redshifts:
             # Now assess which of the bins passes the chosen set of scale cuts
-            #import pdb ; pdb.set_trace()
             rlower,rupper = rmin[count], rmax[count]
-            try:
-                scale_window = (R[count]>rlower) & (R[count]<rupper)
-            except:
-                import pdb ; pdb.set_trace()
+
+            scale_window = (R[count]>rlower) & (R[count]<rupper)
+            
             mask1d.append(scale_window)
             count+=1
-            #print(count)
+            print(rlower,rupper,corr,z0,len(scale_window[scale_window]))
+    #import pdb ; pdb.set_trace()
 
     # Flatten into 1D
     mask1d = np.concatenate(mask1d)
@@ -150,25 +133,21 @@ def parse_cuts(redshifts, corrs_to_use, R, options):
     return mask1d
 
 def execute(block, config):
-    redshifts, corrs_to_use, samples_to_use, R, data, invcov, mask1d, use_limber, apply_pimax = config
+    redshifts, corrs_to_use, samples_to_use, R, data, invcov, mask1d = config
 
-    if use_limber:
-        suffix = '_limber'
-    else:
-        suffix = ''
 
     # Now construct the theory data vector
     y = []
     count=0
     
+    
     for corr, (s1,s2) in zip(corrs_to_use,samples_to_use):
         for z0 in redshifts:
+
+            #import pdb ; pdb.set_trace()
             section = block_names[corr]
 
-            if isinstance(z0,tuple):
-                Y = block[section, 'w_rp_%d_%d_%s_%s'%(z0[0],z0[1],s1,s2)]
-            else:
-                Y = block[section, 'w_rp%s_%3.3f'%(suffix,z0)]
+            Y = block[section, 'w_rp_%d'%(z0)]
 
             xf = block[section, 'r_p']
             if np.all(Y>0):
@@ -186,15 +165,11 @@ def execute(block, config):
                 except:
                     import pdb ; pdb.set_trace()
 
-            if apply_pimax:
-                M = pimax_corrections[s1][int(z0)][corr.replace('w','')]
-                y_resampled*=M
-                #import pdb ; pdb.set_trace()
-
             y.append(y_resampled)
             count+=1
 
     y = np.concatenate(y)
+   # import pdb ; pdb.set_trace()
 
     # Evaluate the likelihood and save it 
     res = (y-data)
@@ -203,7 +178,7 @@ def execute(block, config):
     chi2 = float(chi2)
     like = -0.5*chi2
 
-   # import pdb ; pdb.set_trace()
+ #   import pdb ; pdb.set_trace()
 
 
     block[names.data_vector, 'iacorr'+"_CHI2"] = chi2

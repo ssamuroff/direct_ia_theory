@@ -98,8 +98,8 @@ def execute(block, config):
             Pnew = 10**inter(np.log10(knew), z1)
         else:
             #import pdb ; pdb.set_trace()
-            inter = interp2d(np.log10(k), z, P)
-            Pnew = inter(np.log10(knew), z1)
+            inter = interp2d(np.log10(k), z, np.log10(-P))
+            Pnew = -10**inter(np.log10(knew), z1)
 
 
         if (c=='wgg'):
@@ -126,13 +126,8 @@ def execute(block, config):
             z0 = np.trapz(za*W,za)
             #import pdb ; pdb.set_trace()
 
-            if (do_magnification):
-                Pnew = add_gp_lensmag_terms(block, Pnew, za, knew, z0, s1, s2, cl_dir=cl_dir, do_lensing=False, do_magnification=do_magnification)
-
             W = X.wgm_calc(f=fz, bg=ba, beta2=beta2, pk=-Pnew, xi=None, l=[0,2,4]) 
 
-            if do_lensing:
-                W += X.wgm_calc(f=fz, bg=ba, beta2=beta2, pk=-Pnew, xi=None, l=[0,2,4], do_DS=False) 
 
             #W*=np.sqrt(2.) 
                       
@@ -149,6 +144,9 @@ def execute(block, config):
         	block.put_double_array_1d(section, 'r_p', X.rp)
         except:
         	block.replace_double_array_1d(section, 'r_p', X.rp) 
+
+        #if (c=='wgp'):
+        #    import pdb ; pdb.set_trace()
 
 
     return 0
