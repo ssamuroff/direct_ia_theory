@@ -18,7 +18,8 @@ from scipy.integrate import cumtrapz
 from scipy.integrate import quad
 import glob
 import time
-import pyccl as ccl
+from pyccl import Cosmology
+from pyccl import correlation
 import pylab as plt
 plt.switch_backend('pdf')
 plt.style.use('y1a1')
@@ -63,7 +64,7 @@ def setup(options):
         print('Will not include magnification :(')
 
     ell_max = options.get_double(option_section, "ell_max", default=10000)
-    nell = options.get_double(option_section, "nell", default=800)
+    nell = options.get_double(option_section, "nell", default=200)
 
     # binning
     pimax = options.get_double(option_section, "pimax", default=500.) # in h^-1 Mpc
@@ -116,7 +117,7 @@ def get_approximate_lensing_kernel(block, X, pz, X0, az):
 
 
 
-def get_lensing_terms(block, input_name, do_lensing, do_magnification, ell, P_flat, pz1, pz2, X, X01, X02, z1, z2, az, sample_a, sample_b, save_cls=True):
+def get_lensing_terms(block, input_name, do_lensing, do_magnification, ell, P_flat, pz1, pz2, X, X01, X02, z1, z2, az, sample_a, sample_b, save_cls=False):
 
     if (not do_magnification) and (not do_lensing):
         return 0
@@ -315,11 +316,11 @@ def execute(block, config):
     sigma_8 = 0.8234379064365687 # this is hard coded for now...
     ns = block['cosmological_parameters', 'n_s']
 
-    cosmology = ccl.Cosmology(Omega_c=omega_m-omega_b, Omega_b=omega_b, h=h0, sigma8=sigma_8, n_s=ns, matter_power_spectrum='halofit', transfer_function='boltzmann_camb')
+    cosmology = Cosmology(Omega_c=omega_m-omega_b, Omega_b=omega_b, h=h0, sigma8=sigma_8, n_s=ns, matter_power_spectrum='halofit', transfer_function='boltzmann_camb')
 
     # choose a set of bins for line-of-sight separation 
-    npi = 40
-    nzm = 40
+    npi = 19
+    nzm = 25
     Pi = np.hstack((np.linspace(-500,0,npi), np.linspace(0,500,npi)[1:] ))# h^-1 Mpc
     npi = len(Pi)
     Zm = np.linspace(0.05,2.15,nzm)
@@ -336,7 +337,7 @@ def execute(block, config):
     cl_vec = np.zeros((nzm, npi, len(ell)))
 
     print('initialising arrays...')
-    x1 = np.linspace(0,3,100)
+    x1 = np.linspace(0,3,60)
     X = chi_of_z_spline(x1)
     az = 1./(1+x1)
 
@@ -376,7 +377,7 @@ def execute(block, config):
             
             cl_vec[i,j,:] = Cell
 
-           # import pdb ; pdb.set_trace()
+       #     import pdb ; pdb.set_trace()
 
             #print(i,j)
 
@@ -405,16 +406,18 @@ def execute(block, config):
 
             C = cl_vec[i,j,:]
             #import pdb ; pdb.set_trace()
-            if (nu==0):
-                xi = - (np.pi/np.sqrt(1.04)*np.sqrt(np.pi/2))/1.77 * ccl.correlation(cosmology, ell, C, theta_degrees, corr_type='GL', method='FFTLog')
+            if (C==0).all():
+                xi = np.zeros(len(ell))
+            elif (nu==0):
+                xi = - (np.pi/np.sqrt(1.04)*np.sqrt(np.pi/2))/1.77 * correlation(cosmology, ell, C, theta_degrees, type='NG', method='FFTLog')
 
                 #rp, xi = transform.projected_correlation(ell, C, j_nu=2, taper=True)
                 #xi = 10**interp1d(np.log10(rp), np.log10(-xi))(np.log10(rp_vec))
             elif (nu==1):
-                xi = (np.pi/2) * np.sqrt(1.02)* ccl.correlation(cosmology, ell, C, theta_degrees, corr_type='GG', method='FFTLog')
+                xi = (np.pi/2) * np.sqrt(1.02)* correlation(cosmology, ell, C, theta_degrees, type='NN', method='FFTLog')
             elif (nu==2):
-                xi_0 = ccl.correlation(cosmology, ell, C, theta_degrees, corr_type='L+', method='FFTLog')
-                xi_4 = ccl.correlation(cosmology, ell, C, theta_degrees, corr_type='L-', method='FFTLog')
+                xi_0 = correlation(cosmology, ell, C, theta_degrees, type='GG+', method='FFTLog')
+                xi_4 = correlation(cosmology, ell, C, theta_degrees, type='GG-', method='FFTLog')
                 xi = (1./2/1.08/np.sqrt(np.pi/2))*(xi_0 + xi_4) #/np.sqrt(2)
                 #(np.pi/2/1.08)*(xi_0 + xi_4)
 
@@ -683,7 +686,7 @@ def do_limber_integral(ell, P_flat, p1, p2, X):
 
 
 def gaussian(z0,sigma=0.017):
-    x = np.linspace(0.0,3,100)
+    x = np.linspace(0.0,3,60)
     sigz = sigma * (1+z0)
     return x, np.exp(-(x-z0) * (x-z0) /2 /sigz /sigz)
 
