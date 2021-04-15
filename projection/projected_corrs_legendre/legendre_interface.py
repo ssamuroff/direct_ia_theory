@@ -345,7 +345,8 @@ class Projected_Corr_RSD():
         beta2=f/bg2
         if xi is None:
             xi=self.get_xi(pk=pk,l=l)
-        W = np.zeros_like(xi[xi.keys()[0]])
+#        import pdb ; pdb.set_trace()
+        W = np.zeros_like(xi[[k for k in xi.keys()][0]])
 
        # import pdb ; pdb.set_trace()
         
@@ -358,7 +359,7 @@ class Projected_Corr_RSD():
         beta1=f/bg
         if xi is None:
             xi=self.get_xi(pk=pk,l=l)
-        W=np.zeros_like(xi[xi.keys()[0]])
+        W=np.zeros_like(xi[[k for k in xi.keys()][0]])
         y=[]
         for i in l:
             W+=(xi[i].T*self.alpha(i,beta1,beta2)*bg).T
