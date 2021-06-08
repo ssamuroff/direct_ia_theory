@@ -711,7 +711,7 @@ def do_limber_integral(ell, P_flat, p1, p2, X):
     return np.array(outvec)
 
 
-def choose_pdf(z, sigma=sigmaz, interpolator=Sz_interpolator):
+def choose_pdf(z, sigma=None, interpolator=None):
     if Sz_interpolator is None:
         return gaussian(z, sigma=sigmaz)
     else:
