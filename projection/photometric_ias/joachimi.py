@@ -713,12 +713,12 @@ def do_limber_integral(ell, P_flat, p1, p2, X):
 
 def choose_pdf(z, sigma=None, interpolator=None):
     if interpolator is None:
-        return gaussian(z, sigma=sigmaz)
+        return gaussian(z, sigma=sigma)
     else:
         try: 
             Sz = interpolator(z)
         except:
-            Sz = 0.017
+            Sz = sigma
         return gaussian(z, sigma=Sz)
 
 
