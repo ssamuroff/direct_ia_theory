@@ -45,6 +45,14 @@ def setup(options):
     sample_b = options.get_string(option_section, "sample_b", default="lens")
     sigma_b = options.get_double(option_section, "sigma_b", default=0.01)
 
+    pzmethod = options.get_string(option_section, "pzmethod", default="analytic")
+    sigmaz_file = options.get_string(option_section, "sigmaz_file", default="")
+
+    if pzmethod=='interpolate':
+        z0,sz = np.loadtxt(sigmaz_file).T
+        Sz_interpolator = interp1d(z0,sz) 
+    else:
+        Sz_interpolator = None
 
 
     do_lensing = options.get_bool(option_section, "include_lensing", default=False)
@@ -87,7 +95,7 @@ def setup(options):
         cl_dict = None
 
 
-    return sample_a, sigma_a, sample_b, sigma_b, pimax, nu, input_name, output_name, ell_max, nell, transform, do_lensing, do_magnification, use_precomputed_cls, cl_dict
+    return sample_a, sigma_a, sample_b, sigma_b, pimax, nu, input_name, output_name, ell_max, nell, transform, do_lensing, do_magnification, use_precomputed_cls, cl_dict, Sz_interpolator
 
 def growth_from_power(chi, k, p, k_growth):
     "Get D(chi) from power spectrum"
@@ -306,7 +314,7 @@ def get_lensing_terms(block, input_name, do_lensing, do_magnification, ell, P_fl
 
 
 def execute(block, config):
-    sample_a, sigma_a, sample_b, sigma_b, pimax, nu, input_name, output_name, ell_max, nell, transform, do_lensing, do_magnification, use_precomputed_cls, cl_dict = config
+    sample_a, sigma_a, sample_b, sigma_b, pimax, nu, input_name, output_name, ell_max, nell, transform, do_lensing, do_magnification, use_precomputed_cls, cl_dict, Sz_interpolator = config
     
 
 
@@ -367,10 +375,10 @@ def execute(block, config):
                 #get_cls_from_file(block, input_name, do_lensing, do_magnification, z1, z2, sample_a, sample_b)
             else:
                 # evaluate the per-galaxy PDFs at z1 and z2
-                x1,pz1 = gaussian(z1, sigma=sigma_a)
+                x1,pz1 = choose_pdf(z1, sigma=sigma_a, interpolator=Sz_interpolator) #gaussian(z1, sigma=sigma_a)
                 pz1 /=np.trapz(pz1,X) #pz1.max() 
 
-                x2,pz2 = gaussian(z2, sigma=sigma_b)
+                x2,pz2 = choose_pdf(z2, sigma=sigma_b, interpolator=Sz_interpolator) #gaussian(z2, sigma=sigma_b)
                 pz2 /= np.trapz(pz2,X)
                 
                 Cell = coeff(block, sample_a, sample_b,  input_name) * do_limber_integral(ell, P_flat[input_name], pz1, pz2, X)
@@ -699,6 +707,14 @@ def do_limber_integral(ell, P_flat, p1, p2, X):
  #   import pdb ; pdb.set_trace()      
 
     return np.array(outvec)
+
+
+def choose_pdf(z, sigma=sigmaz, interpolator=Sz_interpolator):
+    if Sz_interpolator is None:
+        return gaussian(z, sigma=sigmaz)
+    else:
+        Sz = Sz_interpolator(z)
+        return gaussian(z, sigma=Sz)
 
 
 
