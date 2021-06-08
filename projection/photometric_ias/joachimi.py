@@ -49,9 +49,11 @@ def setup(options):
     sigmaz_file = options.get_string(option_section, "sigmaz_file", default="")
 
     if pzmethod=='interpolate':
+        print("using interpolated empirical sigma_z from %s"%sigmaz_file)
         z0,sz = np.loadtxt(sigmaz_file).T
         Sz_interpolator = interp1d(z0,sz) 
     else:
+        print("using analytic Gaussian error sigma_z = (1+z)x%1.4f"%sigma_a)
         Sz_interpolator = None
 
 
