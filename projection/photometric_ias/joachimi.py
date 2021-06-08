@@ -715,7 +715,10 @@ def choose_pdf(z, sigma=None, interpolator=None):
     if interpolator is None:
         return gaussian(z, sigma=sigmaz)
     else:
-        Sz = interpolator(z)
+        try: 
+            Sz = interpolator(z)
+        except:
+            import pdb ; pdb.set_trace()
         return gaussian(z, sigma=Sz)
 
 
