@@ -252,7 +252,7 @@ def get_lensing_terms(block, input_name, do_lensing, do_magnification, ell, P_fl
             else:
                 C_GG = do_limber_integral(ell, P_GG, gz1, gz2, X)
 
-            vec += K_GG * C_GG
+            vec += K_GG * C_GG 
 
         # II --------------------
 
@@ -291,12 +291,14 @@ def get_lensing_terms(block, input_name, do_lensing, do_magnification, ell, P_fl
 
             vec += K_IG * C_IG
 
+            #if sum(C_GG)!=0: import pdb ; pdb.set_trace() 
+
 
         if save_cls:
             base='cls/cl_II-'+'%s_%s-z1_%3.3f-z2_%3.3f.txt'%(sample_a, sample_b, z1,z2)
             np.savetxt(base, np.vstack((ell, K_II * C_II, K_GG * C_GG, K_GI * C_GI, K_IG * C_IG)).T)
 
-    #import pdb ; pdb.set_trace()
+      #import pdb ; pdb.set_trace()
     
 
 
@@ -373,6 +375,7 @@ def execute(block, config):
                 
                 Cell = coeff(block, sample_a, sample_b,  input_name) * do_limber_integral(ell, P_flat[input_name], pz1, pz2, X)
                 Cell += get_lensing_terms(block, input_name, do_lensing, do_magnification, ell, P_flat, pz1, pz2, X, chi_of_z_spline(z1), chi_of_z_spline(z2), z1, z2, az, sample_a, sample_b)
+                #import pdb ; pdb.set_trace()
 
             
             cl_vec[i,j,:] = Cell
@@ -417,7 +420,10 @@ def execute(block, config):
                 #rp, xi = transform.projected_correlation(ell, C, j_nu=2, taper=True)
                 #xi = 10**interp1d(np.log10(rp), np.log10(-xi))(np.log10(rp_vec))
             elif (nu==1):
-                xi = (np.pi/2) * np.sqrt(1.02)* correlation(cosmology, ell, C, theta_degrees, type='NN', method='FFTLog')
+                if (abs(C)<1e-40).all():
+                    xi = np.zeros(len(ell))
+                else:
+                    xi = (np.pi/2) * np.sqrt(1.02)* correlation(cosmology, ell, C, theta_degrees, type='NN', method='FFTLog')
             elif (nu==2):
                 if (abs(C)<1e-40).all():
                     xi = np.zeros(len(ell))
@@ -425,8 +431,9 @@ def execute(block, config):
                     xi_0 = correlation(cosmology, ell, C, theta_degrees, type='GG+', method='FFTLog')
                     xi_4 = correlation(cosmology, ell, C, theta_degrees, type='GG-', method='FFTLog')
                     #xi = (1./2/1.08/np.sqrt(np.pi/2))*(xi_0 + xi_4) #/np.sqrt(2)
-                    xi = (1./1.08/np.sqrt(2.*np.pi))*(xi_0 + xi_4) #; import pdb ; pdb.set_trace()
-                    xi = 1.0279*np.sqrt(2)*(xi_0 + xi_4)
+                    #xi = (1./1.08/np.sqrt(2.*np.pi))*(xi_0 + xi_4) #; import pdb ; pdb.set_trace()
+                    xi = 1.0279*np.sqrt(2)*(xi_0 + xi_4)/np.pi
+                    #xi = (xi_0 + xi_4)/2/np.pi
                 #(np.pi/2/1.08)*(xi_0 + xi_4)
 
             xi_vec[i,j,:] = xi
