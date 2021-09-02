@@ -48,10 +48,17 @@ def setup(options):
     pzmethod = options.get_string(option_section, "pzmethod", default="analytic")
     sigmaz_file = options.get_string(option_section, "sigmaz_file", default="")
 
+    include_xlens = options.get_bool(option_section, "include_xlens", default=False)
+    if include_xlens:
+        print('will include Xlens factor')
+        Xlens = 0.877
+    else:
+        Xlens = 1.
+
     if pzmethod=='interpolate':
         print("using interpolated empirical sigma_z from %s"%sigmaz_file)
         z0,sz = np.loadtxt(sigmaz_file).T
-        Sz_interpolator = interp1d(z0,sz) 
+        Sz_interpolator = interp1d(z0,sz) #,fill_value='extrapolate') 
     else:
         print("using analytic Gaussian error sigma_z = (1+z)x%1.4f"%sigma_a)
         Sz_interpolator = None
@@ -97,7 +104,7 @@ def setup(options):
         cl_dict = None
 
 
-    return sample_a, sigma_a, sample_b, sigma_b, pimax, nu, input_name, output_name, ell_max, nell, transform, do_lensing, do_magnification, use_precomputed_cls, cl_dict, Sz_interpolator
+    return sample_a, sigma_a, sample_b, sigma_b, pimax, nu, input_name, output_name, ell_max, nell, transform, do_lensing, do_magnification, use_precomputed_cls, cl_dict, Sz_interpolator, Xlens
 
 def growth_from_power(chi, k, p, k_growth):
     "Get D(chi) from power spectrum"
@@ -276,6 +283,7 @@ def get_lensing_terms(block, input_name, do_lensing, do_magnification, ell, P_fl
             C_II = do_limber_integral(ell, P_II, pz1, pz2, X)
 
         #vec += K_II * C_II
+        #import pdb ; pdb.set_trace()
 
         # GI --------------------
 
@@ -301,6 +309,8 @@ def get_lensing_terms(block, input_name, do_lensing, do_magnification, ell, P_fl
 
             vec += K_IG * C_IG
 
+            #import pdb ; pdb.set_trace() 
+
             #if sum(C_GG)!=0: import pdb ; pdb.set_trace() 
 
 
@@ -316,7 +326,7 @@ def get_lensing_terms(block, input_name, do_lensing, do_magnification, ell, P_fl
 
 
 def execute(block, config):
-    sample_a, sigma_a, sample_b, sigma_b, pimax, nu, input_name, output_name, ell_max, nell, transform, do_lensing, do_magnification, use_precomputed_cls, cl_dict, Sz_interpolator = config
+    sample_a, sigma_a, sample_b, sigma_b, pimax, nu, input_name, output_name, ell_max, nell, transform, do_lensing, do_magnification, use_precomputed_cls, cl_dict, Sz_interpolator, Xlens = config
     
 
 
@@ -425,7 +435,7 @@ def execute(block, config):
                 if (abs(C)<1e-10).all():
                     xi = np.zeros(len(ell))
                 else:
-                    xi = -(np.pi/np.sqrt(1.04) * np.sqrt(np.pi)/2)/1.77 * correlation(cosmology, ell, C, theta_degrees, type='NG', method='FFTLog')
+                    xi = -Xlens * (np.pi/np.sqrt(1.04) * np.sqrt(np.pi/2))/1.77 * correlation(cosmology, ell, C, theta_degrees, type='NG', method='FFTLog')
 
                 #rp, xi = transform.projected_correlation(ell, C, j_nu=2, taper=True)
                 #xi = 10**interp1d(np.log10(rp), np.log10(-xi))(np.log10(rp_vec))
@@ -433,7 +443,7 @@ def execute(block, config):
                 if (abs(C)<1e-40).all():
                     xi = np.zeros(len(ell))
                 else:
-                    xi = (np.pi/2) * np.sqrt(1.02)* correlation(cosmology, ell, C, theta_degrees, type='NN', method='FFTLog')
+                    xi = (np.pi/2) * np.sqrt(1.02)* np.sqrt(2.2) * correlation(cosmology, ell, C, theta_degrees, type='NN', method='FFTLog')
             elif (nu==2):
                 if (abs(C)<1e-40).all():
                     xi = np.zeros(len(ell))
@@ -442,7 +452,7 @@ def execute(block, config):
                     xi_4 = correlation(cosmology, ell, C, theta_degrees, type='GG-', method='FFTLog')
                     #xi = (1./2/1.08/np.sqrt(np.pi/2))*(xi_0 + xi_4) #/np.sqrt(2)
                     #xi = (1./1.08/np.sqrt(2.*np.pi))*(xi_0 + xi_4) #; import pdb ; pdb.set_trace()
-                    xi = 1.0279*np.sqrt(2)*(xi_0 + xi_4)/np.pi
+                    xi = (xi_0 + xi_4)/np.pi/np.sqrt(2)  #1.0279*np.sqrt(2)*(xi_0 + xi_4)/np.pi
                     #xi = (xi_0 + xi_4)/2/np.pi
                 #(np.pi/2/1.08)*(xi_0 + xi_4)
 
@@ -713,19 +723,29 @@ def do_limber_integral(ell, P_flat, p1, p2, X):
 
 def choose_pdf(z, sigma=None, interpolator=None):
     if interpolator is None:
-        return gaussian(z, sigma=sigma)
+        return gaussian(z, sigma=sigma*(1+z))
     else:
         try: 
             Sz = interpolator(z)
+            #if (Sz<0.005) or (z<0.16):
+            #    Sz = 0.005
+            #elif (Sz>(0.017 * (1+z))):
+            #    Sz = 0.017 * (1+z)
+           # print(z,Sz)
         except:
-            Sz = sigma
+            #import pdb ; pdb.set_trace()
+            #Sz = 0.005 #sigma
+            if (z<0.16):
+                Sz = 0.005
+            else:
+                Sz = 0.011 * (1+z)
         return gaussian(z, sigma=Sz)
 
 
 
 def gaussian(z0,sigma=0.017):
     x = np.linspace(0.0,3,100)
-    sigz = sigma * (1+z0)
+    sigz = sigma #* (1+z0)
     return x, np.exp(-(x-z0) * (x-z0) /2 /sigz /sigz)
 
 
