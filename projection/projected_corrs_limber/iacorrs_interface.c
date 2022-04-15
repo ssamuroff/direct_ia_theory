@@ -191,7 +191,7 @@ int execute(c_datablock * block, void * config_in)
 				    tpstat = tp_gt;
 				    sprintf(name, "w_rp_%d_%d_%s_%s", i_bin, j_bin, config->sample_a, config->sample_b);
 				    snprintf(name_w1, 64, name);
-				    coeff = -1. ; //sqrt(2) ;///2.0/PI;
+				    coeff = -1. * sqrt(2./PI)*sqrt(1.1) ; ///2.0/sqrt(1.) ;
 				    break;
 				case gp1h:
 				    tpstat = tp_w;
@@ -203,7 +203,7 @@ int execute(c_datablock * block, void * config_in)
 				    tpstat = tp_xipm;
 				    sprintf(name, "w_rp_%d_%d_%s_%s", i_bin, j_bin, config->sample_a, config->sample_b);
 				    snprintf(name_w1, 64, name);
-				    coeff = 1.0 ; //2.0 * 2.0 * PI; ///4.0/PI;
+				    coeff = 1.0/PI ; //2.0 * 2.0 * PI; ///4.0/PI;
 				    break;
 				case gg:
 				    tpstat = tp_w;

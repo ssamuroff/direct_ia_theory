@@ -47,6 +47,8 @@ def setup(options):
 
     pzmethod = options.get_string(option_section, "pzmethod", default="analytic")
     sigmaz_file = options.get_string(option_section, "sigmaz_file", default="")
+    shape_sigmaz_file = options.get_string(option_section, "shape_sigmaz_file", default="")
+    density_sigmaz_file = options.get_string(option_section, "density_sigmaz_file", default="")
 
     include_xlens = options.get_bool(option_section, "include_xlens", default=False)
     if include_xlens:
@@ -57,11 +59,23 @@ def setup(options):
 
     if pzmethod=='interpolate':
         print("using interpolated empirical sigma_z from %s"%sigmaz_file)
-        z0,sz = np.loadtxt(sigmaz_file).T
-        Sz_interpolator = interp1d(z0,sz) #,fill_value='extrapolate') 
+        print(shape_sigmaz_file,density_sigmaz_file)
+        try:
+            z0,sz = np.loadtxt(shape_sigmaz_file).T
+            Sz_interpolator_shape = interp1d(z0,sz)
+            z0,sz = np.loadtxt(density_sigmaz_file).T
+            Sz_interpolator_density = interp1d(z0,sz)
+            Sz_interpolator = None
+        except:
+            z0,sz = np.loadtxt(sigmaz_file).T
+            Sz_interpolator = interp1d(z0,sz) #,fill_value='extrapolate')
+            Sz_interpolator_density = Sz_interpolator
+            Sz_interpolator_shape = Sz_interpolator
     else:
         print("using analytic Gaussian error sigma_z = (1+z)x%1.4f"%sigma_a)
         Sz_interpolator = None
+        Sz_interpolator_shape = None
+        Sz_interpolator_density = None
 
 
     do_lensing = options.get_bool(option_section, "include_lensing", default=False)
@@ -81,7 +95,7 @@ def setup(options):
         print('Will not include magnification :(')
 
     ell_max = options.get_double(option_section, "ell_max", default=10000)
-    nell = options.get_double(option_section, "nell", default=60)
+    nell = options.get_double(option_section, "nell", default=600)
 
     # binning
     pimax = options.get_double(option_section, "pimax", default=68.) # in h^-1 Mpc
@@ -104,7 +118,7 @@ def setup(options):
         cl_dict = None
 
 
-    return sample_a, sigma_a, sample_b, sigma_b, pimax, nu, input_name, output_name, ell_max, nell, transform, do_lensing, do_magnification, use_precomputed_cls, cl_dict, Sz_interpolator, Xlens
+    return sample_a, sigma_a, sample_b, sigma_b, pimax, nu, input_name, output_name, ell_max, nell, transform, do_lensing, do_magnification, use_precomputed_cls, cl_dict, Sz_interpolator, Xlens, Sz_interpolator_shape, Sz_interpolator_density
 
 def growth_from_power(chi, k, p, k_growth):
     "Get D(chi) from power spectrum"
@@ -326,7 +340,7 @@ def get_lensing_terms(block, input_name, do_lensing, do_magnification, ell, P_fl
 
 
 def execute(block, config):
-    sample_a, sigma_a, sample_b, sigma_b, pimax, nu, input_name, output_name, ell_max, nell, transform, do_lensing, do_magnification, use_precomputed_cls, cl_dict, Sz_interpolator, Xlens = config
+    sample_a, sigma_a, sample_b, sigma_b, pimax, nu, input_name, output_name, ell_max, nell, transform, do_lensing, do_magnification, use_precomputed_cls, cl_dict, Sz_interpolator, Xlens, Sz_interpolator_shape, Sz_interpolator_density = config
     
 
 
@@ -341,30 +355,37 @@ def execute(block, config):
     cosmology = Cosmology(Omega_c=omega_m-omega_b, Omega_b=omega_b, h=h0, sigma8=sigma_8, n_s=ns, matter_power_spectrum='halofit', transfer_function='boltzmann_camb')
 
     # choose a set of bins for line-of-sight separation 
-    npi = 20
-    nzm = 50
+    npi = 40
+    nzm = 100
     Pi = np.hstack((np.linspace(-500,0,npi), np.linspace(0,500,npi)[1:] ))# h^-1 Mpc
     npi = len(Pi)
-    Zm = np.linspace(0.05,2.15,nzm)
+    Zm = np.linspace(0.001,3.00,nzm)
 
 
     z_distance = block['distances', 'z']
-    chi_distance = block['distances', 'd_m']
+    chi_distance = block['distances', 'd_m']*h0
     a_distance = 1./(1+z_distance)
     chi_of_z_spline = interp1d(z_distance, chi_distance)
 
 
 
-    ell = np.logspace(-1,np.log10(8000000),100)
+    #ell = np.logspace(-1,np.log10(8000000),300)
+    ell = np.logspace(-6,np.log10(6000),2048) 
     cl_vec = np.zeros((nzm, npi, len(ell)))
 
     print('initialising arrays...')
-    x1 = np.linspace(0,3,100)
+    x1 = np.linspace(0.001,3,800)
     X = chi_of_z_spline(x1)
     az = 1./(1+x1)
 
     if not use_precomputed_cls:
-        P_flat = load_power_all(block, input_name, chi_of_z_spline, ell, X, do_lensing, do_magnification)
+        P_flat,Pk_spline,loglog,mloglog = load_power_all(block, input_name, chi_of_z_spline, ell, X, do_lensing, do_magnification)
+
+    if (sigma_b<0.007) & (sigma_a<0.007):
+        do_full_integral=False
+    else:
+        do_full_integral=True
+        
 
     # first bit: Limber integrals
     print('Starting loop')
@@ -387,13 +408,13 @@ def execute(block, config):
                 #get_cls_from_file(block, input_name, do_lensing, do_magnification, z1, z2, sample_a, sample_b)
             else:
                 # evaluate the per-galaxy PDFs at z1 and z2
-                x1,pz1 = choose_pdf(z1, sigma=sigma_a, interpolator=Sz_interpolator) #gaussian(z1, sigma=sigma_a)
+                x1,pz1 = choose_pdf(z1, sigma=sigma_a, interpolator=Sz_interpolator_density) #gaussian(z1, sigma=sigma_a)
                 pz1 /=np.trapz(pz1,X) #pz1.max() 
 
-                x2,pz2 = choose_pdf(z2, sigma=sigma_b, interpolator=Sz_interpolator) #gaussian(z2, sigma=sigma_b)
+                x2,pz2 = choose_pdf(z2, sigma=sigma_b, interpolator=Sz_interpolator_shape) #gaussian(z2, sigma=sigma_b)
                 pz2 /= np.trapz(pz2,X)
                 
-                Cell = coeff(block, sample_a, sample_b,  input_name) * do_limber_integral(ell, P_flat[input_name], pz1, pz2, X)
+                Cell = coeff(block, sample_a, sample_b,  input_name) * do_limber_integral(ell, P_flat[input_name], pz1, pz2, X, full_integral=do_full_integral, z1=z1, z2=z2, chi_spline=chi_of_z_spline, Pk_spline=Pk_spline, loglog=loglog, mloglog=mloglog )
                 Cell += get_lensing_terms(block, input_name, do_lensing, do_magnification, ell, P_flat, pz1, pz2, X, chi_of_z_spline(z1), chi_of_z_spline(z2), z1, z2, az, sample_a, sample_b)
                 #import pdb ; pdb.set_trace()
 
@@ -409,7 +430,7 @@ def execute(block, config):
 
     # Next do the Hankel transform
     xi_vec = np.zeros_like(cl_vec)-9999.
-    rp_vec = np.logspace(np.log10(0.01), np.log10(500), xi_vec.shape[2])
+    rp_vec = np.logspace(np.log10(0.1), np.log10(300), xi_vec.shape[2])
     theta = 2*np.pi/np.flipud(ell) * (180/np.pi)
 
     print('Hankel transform...')
@@ -417,7 +438,7 @@ def execute(block, config):
     for i, zm in enumerate(Zm):
         x0 =  chi_of_z_spline(zm)
         # do the coordinate transform to convert theta to rp at given redshift
-        theta_radians = rp_vec/x0
+        theta_radians = np.arctan(rp_vec/x0)
         theta_degrees = theta_radians * 180./np.pi
 
         for j,p in enumerate(Pi):
@@ -432,10 +453,11 @@ def execute(block, config):
             if (nu==0):
                # import pdb ; pdb.set_trace() 
                 #xi = - (np.pi/np.sqrt(1.04)*np.sqrt(np.pi/2))/1.77 * correlation(cosmology, ell, C, theta_degrees, type='NG', method='FFTLog')
-                if (abs(C)<1e-10).all():
+                if (abs(C)<1e-40).all():
                     xi = np.zeros(len(ell))
                 else:
-                    xi = -Xlens * (np.pi/np.sqrt(1.04) * np.sqrt(np.pi/2))/1.77 * correlation(cosmology, ell, C, theta_degrees, type='NG', method='FFTLog')
+                    #xi = -Xlens * np.sqrt(2*np.pi/1.1) * correlation(cosmology, ell, C, theta_degrees, type='NG', method='FFTLog')
+                    xi = -Xlens * 0.93 * correlation(cosmology, ell, C, theta_degrees, type='NG', method='FFTLog')   
 
                 #rp, xi = transform.projected_correlation(ell, C, j_nu=2, taper=True)
                 #xi = 10**interp1d(np.log10(rp), np.log10(-xi))(np.log10(rp_vec))
@@ -463,6 +485,7 @@ def execute(block, config):
             #    import pdb ; pdb.set_trace()
 
     #rp_vec*=h0
+    #Pi/=h0
 
     print('saving')
 
@@ -475,16 +498,18 @@ def execute(block, config):
     
     mask = ((Pi<pimax) & (Pi>-pimax))
     print('pi_max=%3.3f'%pimax)
-    xi_pi_rp = np.trapz(xi_vec[:,mask,:], Pi[mask], axis=1)
+    xi_pi_rp = np.trapz(xi_vec[:,mask,:], x=Pi[mask], axis=1)
 
     # and then over redshift
     za, W = get_redshift_kernel(block, 0, 0, x1, X, sample_a, sample_b)
+    W/=np.trapz(W,za)
     #W[np.isnan(W)] = 0
     #import pdb ; pdb.set_trace() 
-    Wofz = interp1d(W,za)
+    Wofz = interp1d(za,W)
     K = np.array([Wofz(Zm)]*len(rp_vec)).T
-    #K = np.array([W]*len(rp_vec)).T
-    w_rp = np.trapz(xi_pi_rp*K, Zm, axis=0)/np.trapz(K, Zm, axis=0)
+
+    w_rp = np.trapz(xi_pi_rp*K, x=Zm, axis=0) #/np.trapz(K, Zm, axis=0)
+    #w_rp = (xi_pi_rp[10,:] + xi_pi_rp[11,:])/2
 
     #bg = block['bias_parameters','b_%s'%sample_a]
     #w_rp*=bg
@@ -635,15 +660,23 @@ def load_power_all(block, input_name, chi_of_z_spline, ell, X, do_lensing, do_ma
 
     loglog, mloglog, P_interp = interpolate_power(k,z,Pk,chi_of_z_spline)
     #P_interp = interp2d(np.log10(k), chi_of_z_spline(z), Pk) ; loglog=False
+    knew = np.array([[(l+0.5)/x for x in X] for l in ell])
+
+    #import pdb ; pdb.set_trace()
 
     if loglog:
-        P_flat = np.array([[10**P_interp(np.log10(l/x), x)[0] for x in X] for l in ell])
+        P_flat = np.array([[10**P_interp(np.log10((l+0.5)/x), x)[0] for x in X] for l in ell])
         if mloglog:
             P_flat*=-1
     else:
-        P_flat = np.array([[P_interp(np.log10(l/x), x)[0] for x in X] for l in ell])
+        P_flat = np.array([[P_interp(np.log10((l+0.5)/x), x)[0] for x in X] for l in ell])
 
     Pk_flat_dict[input_name] = P_flat
+
+    interp0=P_interp
+    loglog0=loglog
+    mloglog0=mloglog
+    #import pdb ; pdb.set_trace() 
 
     # also some extra ones if needed
     if do_lensing or do_magnification:
@@ -688,12 +721,13 @@ def load_power_all(block, input_name, chi_of_z_spline, ell, X, do_lensing, do_ma
 
         Pk_flat_dict['galaxy_intrinsic_power'] = P_flat
 
-    return Pk_flat_dict
+    return Pk_flat_dict, interp0, loglog0, mloglog0
 
 
 
-def do_limber_integral(ell, P_flat, p1, p2, X):
+def do_limber_integral(ell, P_flat, p1, p2, X, full_integral=True, z1=0., z2=0., chi_spline=None, Pk_spline=None, loglog=False, mloglog=False):
     outvec = [] 
+    x1 = np.linspace(0.001,3,800)
     
 #    for i, l in enumerate(ell):
 #        K = 1./X/X*p1*p2*P_flat[i]
@@ -708,15 +742,41 @@ def do_limber_integral(ell, P_flat, p1, p2, X):
 #        #I,_ = quad(interp, X[0], X[-1])
 #        outvec.append(I)
 
-    K0 = np.array([1./X/X*p1*p2*P_flat[i] for i in range(len(ell))])
-    K0[np.isinf(K0)] = 0.
-    K0[np.isnan(K0)] = 0.
-    outvec = cumtrapz(K0, x=X, initial=0, axis=1)[:,-1]
-    # this is about twice as fast as the commented out method above using a loop
-    # python... :) 
+    if full_integral:
+        K0 = np.array([1./X/X*p1*p2*P_flat[i] for i in range(len(ell))])
+        K0[np.isinf(K0)] = 0.
+        K0[np.isnan(K0)] = 0.
+        outvec = cumtrapz(K0, x=X, initial=0, axis=1)[:,-1]
+        # this is about twice as fast as the commented out method above using a loop
+        # python... :)
 
+    else:
+        nell = len(ell)
+        if z1!=z2:
+            outvec = np.zeros(nell)
+        else:
+            X0 = chi_spline(z1)*1.
+            k0 = (ell+0.5)/X0
+            P0 = Pk_spline(np.log10(k0),X0)
+            if loglog:
+                P0=10**P0
+                if mloglog:
+                    P0*=-1
+            
+            outvec = 1./X0/X0 * P0 / (2*2*np.pi) 
+            # the factors of 2pi come from the two Delta functions
 
- #   import pdb ; pdb.set_trace()      
+#            if z1>=0.25:
+#                K0 = np.array([1./X/X*p1*p2*P_flat[i] for i in range(len(ell))])
+#                K0[np.isinf(K0)] = 0.
+#                K0[np.isnan(K0)] = 0.
+#                outvec2 = cumtrapz(K0, x=X, initial=0, axis=1)[:,-1]
+#                import pdb ; pdb.set_trace() 
+
+            kmin=1e-8
+            kmax=600
+            #mask = (k0<kmin) | (k0>kmax)
+            #outvec[mask]=1e-30
 
     return np.array(outvec)
 
@@ -733,18 +793,21 @@ def choose_pdf(z, sigma=None, interpolator=None):
             #    Sz = 0.017 * (1+z)
            # print(z,Sz)
         except:
-            #import pdb ; pdb.set_trace()
-            #Sz = 0.005 #sigma
-            if (z<0.16):
-                Sz = 0.005
-            else:
-                Sz = 0.011 * (1+z)
+            try:
+                Sz = interpolator(0.8)
+            except:
+                Sz = interpolator(0.45)
+##            if (z<0.16):
+##                Sz = 0.005
+
+ #           else:
+ #               Sz = 0.011 * (1+z)
         return gaussian(z, sigma=Sz)
 
 
 
 def gaussian(z0,sigma=0.017):
-    x = np.linspace(0.0,3,100)
+    x = np.linspace(0.001,3,800)
     sigz = sigma #* (1+z0)
     return x, np.exp(-(x-z0) * (x-z0) /2 /sigz /sigz)
 
