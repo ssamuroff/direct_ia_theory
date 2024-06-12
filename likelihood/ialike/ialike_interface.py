@@ -5,9 +5,7 @@ import sys
 import fitsio as fi
 import numpy as np
 import scipy.interpolate as spi
-import pylab as plt
-plt.switch_backend('pdf')
-plt.style.use('y1a1')
+
 
 #ordering: gg, gp, pp
 pimax_corrections={'tng': {0:{'gg':0.974641,'gp':0.982287,'pp':0.985378},1:{'gg':0.981684,'gp':0.986832,'pp':0.988855},2:{'gg':0.979082,'gp':0.985709,'pp':0.988479},3:{'gg':0.978361,'gp':0.984973,'pp':0.987730}},
