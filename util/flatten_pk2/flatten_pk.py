@@ -14,7 +14,11 @@ def setup(options):
     sample_b = options.get_string(option_section, "sample_b", default="lens")
     window_function = options.get_bool(option_section, "window_function", default=False)
 
-    return power_spectrum_name, redshift, add_bias, add_ia, add_rsd, window_function, sample_a, sample_b
+    add_bias = options.get_bool(option_section, "add_bias", default=False)
+    add_ia = options.get_bool(option_section, "add_ia", default=False)
+    add_rsd = options.get_bool(option_section, "add_rsd", default=False)
+
+    return power_spectrum_name, add_bias, add_ia, add_rsd, window_function, sample_a, sample_b
 
 def apply_ia(block, pkname, redshift, pk, add_ia):
 	if (not add_ia) or (pkname=='galaxy_power'):
@@ -61,7 +65,7 @@ def apply_bias(block, pkname, sample_a, sample_b, redshift, pk, add_bias):
 
 
 def execute(block, config):
-	power_spectrum_name, redshift, add_bias, add_ia, add_rsd, window_function, sample_a, sample_b = config
+	power_spectrum_name, add_bias, add_ia, add_rsd, window_function, sample_a, sample_b = config
 
 	z,k,pk = block.get_grid(power_spectrum_name, 'z', 'k_h', 'p_k')
 
@@ -79,7 +83,7 @@ def execute(block, config):
 	# Effectively assuming the redshift distribution is a delta fn.
 	# Store the linearised power spectrum to the block with the suffix identifying z
 	# Only do this if window_function=F
-	redshift = np.atleast_1d(redshift)
+	#redshift = np.atleast_1d(redshift)
 	if (not window_function):
 		for z0 in redshift:
 			pk_interpolated = interp(np.log(k), [z0])

@@ -32,8 +32,8 @@ def setup(options):
 
     if isinstance(redshifts, float):
         redshifts = np.atleast_1d(redshifts)
-
-    if isinstance(redshifts, unicode):
+    else:
+    #if isinstance(redshifts, np.unicode):
         redshifts = list(np.atleast_1d(redshifts))
         for i,z in enumerate(redshifts):
             a,b = z.split(',')
