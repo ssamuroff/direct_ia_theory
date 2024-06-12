@@ -1,8 +1,8 @@
 /*CosmoSIS interface file for going from shear C(l) to xi+/-
 Uses function tpstat_via_hankel from Martin Kilbinger's nicaea
 */
-#include "cosmosis/datablock/c_datablock.h"
-#include "cosmosis/datablock/section_names.h"
+#include "datablock/c_datablock.h"
+#include "datablock/section_names.h"
 #include "maths.h"
 
 #include <stdio.h>
@@ -147,7 +147,7 @@ int execute(c_datablock * block, void * config_in)
 	double * kh;
 	int n_k;
 	printf("Converting power spectrum to w(r_p): \n");
-	printf(config->input_section);
+//	printf(config->input_section);
 	printf("...\n");
 	status |= c_datablock_get_double_array_1d(block, "matter_power_nl", "k_h", &kh, &n_k);
 	if (status) {
@@ -203,7 +203,7 @@ int execute(c_datablock * block, void * config_in)
 				    tpstat = tp_xipm;
 				    sprintf(name, "w_rp_%d_%d_%s_%s", i_bin, j_bin, config->sample_a, config->sample_b);
 				    snprintf(name_w1, 64, name);
-				    coeff = 1.0/PI ; //2.0 * 2.0 * PI; ///4.0/PI;
+				    coeff = 1.0 ; //2.0 * 2.0 * PI; ///4.0/PI;
 				    break;
 				case gg:
 				    tpstat = tp_w;

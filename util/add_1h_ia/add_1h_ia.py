@@ -48,8 +48,14 @@ def execute(block, config):
         mi = mi_1h + mi_2h
         ii = ii_1h + ii_2h
 
-        block.replace_grid('galaxy_intrinsic_power', 'k_h', k,'z', z,'p_k', gi)
-        block.replace_grid('matter_intrinsic_power', 'k_h', k,'z', z,'p_k', mi)
-        block.replace_grid('intrinsic_power', 'k_h', k,'z', z,'p_k', ii)
+#        import pdb ; pdb.set_trace()
+
+        block['galaxy_intrinsic_power','p_k'] = gi_1h.T
+        block['intrinsic_power','p_k'] = ii_1h.T
+        block['matter_intrinsic_power','p_k'] = mi_1h.T
+
+#        block.replace_grid('galaxy_intrinsic_power', 'k_h', k,'z', z,'p_k', gi)
+#        block.replace_grid('matter_intrinsic_power', 'k_h', k,'z', z,'p_k', mi)
+#        block.replace_grid('intrinsic_power', 'k_h', k,'z', z,'p_k', ii)
 
     return 0
