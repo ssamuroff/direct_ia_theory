@@ -74,8 +74,10 @@ def setup(options):
 
                 if 'BIN' in dvec.dtype.names:
                     mask = (dvec['BIN']==i)
+                elif 'BIN1' in dvec.dtype.names:
+                    mask = (dvec['BIN1']==z0[0]) & (dvec['BIN2']==z0[1]) & (dvec['SAMPLE1']==s1) & (dvec['SAMPLE2']==s2)
                 else:
-                    mask = (dvec['BIN1']==z0[0]) & (dvec['BIN2']==z0[1]) & (dvec['SAMPLE1']==s1) & (dvec['SAMPLE2']==s2) 
+                    mask = np.ones_like(dvec['VALUE']).astype(bool)
 
                 data.append(dvec['VALUE'][mask])
                 R.append(dvec['SEP'][mask])
