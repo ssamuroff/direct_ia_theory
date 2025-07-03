@@ -195,6 +195,8 @@ def execute(block, config):
             count+=1
 
     y = np.concatenate(y)
+    block[names.data_vector,'iacorr_theory'] = y
+    block[names.data_vector,'iacorr_data'] = data
 
     # Evaluate the likelihood and save it 
     res = (y-data)
